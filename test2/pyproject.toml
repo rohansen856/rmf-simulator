@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "rmf-monitor-simulator"
+version = "1.0.0"
+description = "RMF Monitor III Data Simulator for z/OS metrics"
+authors = ["Rohan Sen <rohansen856@gmail.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.104.1"
+uvicorn = {extras = ["standard"], version = "^0.24.0"}
+prometheus-client = "^0.19.0"
+python-multipart = "^0.0.6"
+pydantic = "^2.5.0"
+pydantic-settings = "^2.1.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.3"
+pytest-asyncio = "^0.21.1"
+httpx = "^0.25.2"
+black = "^23.11.0"
+isort = "^5.12.0"
+flake8 = "^6.1.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
