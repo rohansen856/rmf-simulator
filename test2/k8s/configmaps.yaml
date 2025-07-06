@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rmf-simulator-config
+  namespace: rmf-monitoring
+data:
+  LOG_LEVEL: "INFO"
+  PROMETHEUS_MULTIPROC_DIR: "/tmp/prometheus_multiproc_dir"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: rmf-monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+    rule_files:
+      - "/etc/prometheus/alert_rules.yml"
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets:
+              - alertmanager:9093
+    scrape_configs:
+      - job_name: 'rmf-simulator'
+        static_configs:
+          - targets: ['rmf-simulator:8000']
+        metrics_path: '/metrics'
+        scrape_interval: 15s
+        scrape_timeout: 10s
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+        - role: pod
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+          action: keep
+          regex: true
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+  alert_rules.yml: |
+    groups:
+    - name: mainframe_alerts
+      rules:
+      - alert: MainframeCPUHigh
+        expr: rmf_cpu_utilization_percent > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU utilization on {{ $labels.lpar }}"
+          description: "CPU utilization has exceeded 85% for 5 minutes"
+      - alert: MainframeMemoryHigh
+        expr: (rmf_memory_usage_bytes{memory_type="real_storage"} / (64 * 1024 * 1024 * 1024)) * 100 > 90
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High memory utilization on {{ $labels.lpar }}"
+      - alert: MainframeIOResponseHigh
+        expr: rmf_ldev_response_time_seconds > 0.05
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High I/O response time on {{ $labels.lpar }}"
