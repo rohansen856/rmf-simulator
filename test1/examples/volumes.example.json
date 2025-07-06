@@ -1,0 +1,4 @@
+{ "volumes": [
+    { "name": "VOL01", "capacity_mb": 204800, "used_mb": 102400, "free_mb": 102400, "percent_used": 50.0, "io_rate_ops": 120 }
+  ]
+}
