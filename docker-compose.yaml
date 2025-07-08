@@ -8,17 +8,27 @@ services:
     environment:
       - PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus_multiproc_dir
       - LOG_LEVEL=INFO
+
       - MYSQL_HOST=mysql
       - MYSQL_PORT=3306
       - MYSQL_DATABASE=rmf_monitoring
       - MYSQL_USER=rmf_user
       - MYSQL_PASSWORD=rmf_password
       - MYSQL_ROOT_PASSWORD=root_password
+
+      - MONGO_HOST=mongodb
+      - MONGO_PORT=27017
+      - MONGO_DATABASE=rmf_monitoring
+      - MONGO_USERNAME=rmf_user
+      - MONGO_PASSWORD=rmf_password
+      - MONGO_AUTH_SOURCE=rmf_monitoring
     volumes:
       - prometheus_data:/tmp/prometheus_multiproc_dir
     restart: no
     depends_on:
       mysql:
+        condition: service_healthy
+      mongodb:
         condition: service_healthy
     networks:
       - monitoring
@@ -52,6 +62,30 @@ services:
       retries: 10
       interval: 10s
       start_period: 60s
+
+  mongodb:
+    image: mongo:8.0
+    restart: no
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin_password
+      MONGO_INITDB_DATABASE: rmf_monitoring
+      MONGO_USER: rmf_user
+      MONGO_PASSWORD: rmf_password
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongo-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - monitoring
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    command: ["mongod", "--auth", "--bind_ip_all"]
 
   prometheus:
     image: prom/prometheus:v2.47.0
@@ -111,6 +145,7 @@ networks:
 
 volumes:
   mysql_data:
+  mongodb_data:
   prometheus_data:
   prometheus_storage:
   grafana_storage:
