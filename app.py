@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from metrices.updater import start_updater
 from utils.logger import logger
-from routes import health, metrics, system
+from routes import health, metrics, system, storage
 
 app = FastAPI(
     title="RMF Monitor III Data Simulator",
@@ -27,6 +27,7 @@ async def on_startup():
 app.include_router(health.router)
 app.include_router(metrics.router)
 app.include_router(system.router)
+app.include_router(storage.router)
 
 
 
