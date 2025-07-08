@@ -1,10 +1,12 @@
 from datetime import datetime
 from fastapi import APIRouter
+from storage.mongodb.service import MongoDBService
 from utils.logger import logger
 from storage.mysql.service import DatabaseService
 
 router = APIRouter()
 db = DatabaseService()
+mongo = MongoDBService()
 
 @router.get("/database-summary")
 async def get_database_summary():
@@ -41,3 +43,21 @@ async def cleanup_old_data(days_to_keep: int = 90):
             "error": str(e),
             "timestamp": datetime.now().isoformat()
         }
+
+@router.get("/mongodb-summary")
+async def mongodb_summary():
+    """Get MongoDB metrics summary"""
+    try:
+        summary = mongo.get_metrics_summary()
+        return {"summary": summary}
+    except Exception as e:
+        return {"error": str(e)}
+
+@router.get("/mongodb-latest/{sysplex}")
+async def get_latest_mongodb_metrics(sysplex: str, lpar: str = None, limit: int = 100):
+    """Get latest metrics from MongoDB"""
+    try:
+        metrics = mongo.get_latest_metrics(sysplex, lpar, limit)
+        return {"metrics": metrics}
+    except Exception as e:
+        return {"error": str(e)}
