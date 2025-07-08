@@ -1,7 +1,7 @@
 from datetime import datetime
 from fastapi import APIRouter
 from utils.logger import logger
-from storage.service import DatabaseService
+from storage.mysql.service import DatabaseService
 
 router = APIRouter()
 db = DatabaseService()

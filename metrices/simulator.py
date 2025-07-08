@@ -3,7 +3,7 @@ import random
 
 from metrices.definitions import CLPR_REQUEST_RATE, CLPR_SERVICE_TIME, CPU_UTILIZATION, LDEV_RESPONSE_TIME, LDEV_UTILIZATION, MEMORY_USAGE, MPB_PROCESSING_RATE, MPB_QUEUE_DEPTH, PORTS_THROUGHPUT, PORTS_UTILIZATION, VOLUMES_IOPS, VOLUMES_UTILIZATION
 from models.lpar import LPARConfig
-from storage.service import DatabaseService
+from storage.mysql.service import DatabaseService
 from utils.logger import logger
 from utils.confiig import LPAR_CONFIGS
 
