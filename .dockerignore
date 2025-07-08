@@ -1,0 +1,27 @@
+# Python virtual environments
+venv
+__pycache__
+
+# FastAPI examples or test directories
+examples
+tests
+
+# Kubernetes configuration files
+k8s
+
+# Logs and temporary files
+*.log
+*.tmp
+
+# IDE and editor files
+.vscode
+.idea
+
+# Git-related files
+.git
+.gitignore
+
+# Build artifacts
+dist
+build
+*.egg-info

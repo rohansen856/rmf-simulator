@@ -3,6 +3,7 @@ import random
 
 from metrices.definitions import CLPR_REQUEST_RATE, CLPR_SERVICE_TIME, CPU_UTILIZATION, LDEV_RESPONSE_TIME, LDEV_UTILIZATION, MEMORY_USAGE, MPB_PROCESSING_RATE, MPB_QUEUE_DEPTH, PORTS_THROUGHPUT, PORTS_UTILIZATION, VOLUMES_IOPS, VOLUMES_UTILIZATION
 from models.lpar import LPARConfig
+from storage.service import DatabaseService
 from utils.logger import logger
 from utils.confiig import LPAR_CONFIGS
 
@@ -13,6 +14,7 @@ class MainframeSimulator:
         self.start_time = datetime.now()
         self.base_values = {}
         self.trend_factors = {}
+        self.db_service = DatabaseService()
         self.initialize_baselines()
     
     def initialize_baselines(self):
@@ -85,6 +87,15 @@ class MainframeSimulator:
             lpar=lpar_config.name,
             cpu_type="zaap"
         ).set(zaap_util)
+
+        # database storage
+        timestamp = datetime.now()
+        try:
+            self.db_service.insert_cpu_metric(timestamp, self.sysplex_name, lpar_config.name, "general_purpose", gp_util)
+            self.db_service.insert_cpu_metric(timestamp, self.sysplex_name, lpar_config.name, "ziip", ziip_util)
+            self.db_service.insert_cpu_metric(timestamp, self.sysplex_name, lpar_config.name, "zaap", zaap_util)
+        except Exception as e:
+            logger.error(f"Error storing CPU metrics to database: {e}")
         
         logger.debug(f"CPU metrics updated for {lpar_config.name}: GP={gp_util:.1f}%, zIIP={ziip_util:.1f}%")
     
@@ -122,6 +133,15 @@ class MainframeSimulator:
             lpar=lpar_config.name,
             memory_type="csa"
         ).set(csa_memory)
+
+        # database storage
+        timestamp = datetime.now()
+        try:
+            self.db_service.insert_memory_metric(timestamp, self.sysplex_name, lpar_config.name, "real_storage", used_memory)
+            self.db_service.insert_memory_metric(timestamp, self.sysplex_name, lpar_config.name, "virtual_storage", virtual_memory)
+            self.db_service.insert_memory_metric(timestamp, self.sysplex_name, lpar_config.name, "csa", csa_memory)
+        except Exception as e:
+            logger.error(f"Error storing memory metrics to database: {e}")
     
     def simulate_ldev_metrics(self, lpar_config: LPARConfig):
         """Generate realistic LDEV (storage device) metrics"""
@@ -135,6 +155,7 @@ class MainframeSimulator:
             "tape": {"count": 12, "response_base": 45.0, "util_base": 25.0},
         }
         
+        timestamp = datetime.now()
         for device_type, config in device_types.items():
             for i in range(config["count"]):
                 device_id = f"{device_type}_{i:02d}"
@@ -159,6 +180,17 @@ class MainframeSimulator:
                     lpar=lpar_config.name,
                     device_id=device_id
                 ).set(utilization)
+
+                # database storage
+                try:
+                    self.db_service.insert_ldev_response_time_metric(
+                        timestamp, self.sysplex_name, lpar_config.name, device_type, response_time / 1000.0
+                    )
+                    self.db_service.insert_ldev_utilization_metric(
+                        timestamp, self.sysplex_name, lpar_config.name, device_id, utilization
+                    )
+                except Exception as e:
+                    logger.error(f"Error storing LDEV metrics to database: {e}")
     
     def simulate_clpr_metrics(self, lpar_config: LPARConfig):
         """Generate realistic Coupling Facility Link Performance metrics"""
@@ -168,6 +200,7 @@ class MainframeSimulator:
         # Multiple CF links per LPAR
         cf_links = [f"CF{i:02d}" for i in range(1, 5)]
         
+        timestamp = datetime.now()
         for cf_link in cf_links:
             # Service time (microseconds)
             service_time = base_service_time * time_factor * (1 + random.uniform(-0.3, 0.5))
@@ -196,6 +229,20 @@ class MainframeSimulator:
                 cf_link=cf_link,
                 request_type="asynchronous"
             ).set(async_rate)
+
+            # database storage
+            try:
+                self.db_service.insert_clpr_service_time_metric(
+                    timestamp, self.sysplex_name, lpar_config.name, cf_link, service_time
+                )
+                self.db_service.insert_clpr_request_rate_metric(
+                    timestamp, self.sysplex_name, lpar_config.name, cf_link, "synchronous", sync_rate
+                )
+                self.db_service.insert_clpr_request_rate_metric(
+                    timestamp, self.sysplex_name, lpar_config.name, cf_link, "asynchronous", async_rate
+                )
+            except Exception as e:
+                logger.error(f"Error storing CLPR metrics to database: {e}")
     
     def simulate_mpb_metrics(self, lpar_config: LPARConfig):
         """Generate realistic Message Processing Block metrics"""
@@ -203,6 +250,7 @@ class MainframeSimulator:
         
         queue_types = ["CICS", "IMS", "MQ", "BATCH"]
         
+        timestamp = datetime.now()
         for queue_type in queue_types:
             # Processing rate varies by queue type and workload
             base_rate = {
@@ -229,6 +277,17 @@ class MainframeSimulator:
                 lpar=lpar_config.name,
                 queue_type=queue_type
             ).set(queue_depth)
+
+            # database storage
+            try:
+                self.db_service.insert_mpb_processing_rate_metric(
+                    timestamp, self.sysplex_name, lpar_config.name, queue_type, processing_rate
+                )
+                self.db_service.insert_mpb_queue_depth_metric(
+                    timestamp, self.sysplex_name, lpar_config.name, queue_type, queue_depth
+                )
+            except Exception as e:
+                logger.error(f"Error storing MPB metrics to database: {e}")
     
     def simulate_ports_metrics(self, lpar_config: LPARConfig):
         """Generate realistic port utilization and throughput metrics"""
@@ -240,6 +299,7 @@ class MainframeSimulator:
             "FICON": {"count": 8, "max_throughput": 400, "base_util": 45.0},
         }
         
+        timestamp = datetime.now()
         for port_type, config in port_types.items():
             for i in range(config["count"]):
                 port_id = f"{port_type}_{i:02d}"
@@ -265,6 +325,18 @@ class MainframeSimulator:
                     port_type=port_type,
                     port_id=port_id
                 ).set(throughput)
+
+                # database storage
+                try:
+                    self.db_service.insert_ports_utilization_metric(
+                        timestamp, self.sysplex_name, lpar_config.name, port_type, port_id, utilization
+                    )
+                    self.db_service.insert_ports_throughput_metric(
+                        timestamp, self.sysplex_name, lpar_config.name, port_type, port_id, throughput
+                    )
+                except Exception as e:
+                    logger.error(f"Error storing ports metrics to database: {e}")
+
     
     def simulate_volumes_metrics(self, lpar_config: LPARConfig):
         """Generate realistic volume metrics"""
@@ -277,6 +349,7 @@ class MainframeSimulator:
             "TEMP": {"count": 8, "base_util": 25.0, "base_iops": 400},
         }
         
+        timestamp = datetime.now()
         for volume_type, config in volume_types.items():
             for i in range(config["count"]):
                 volume_id = f"{volume_type}{i:03d}"
@@ -302,6 +375,18 @@ class MainframeSimulator:
                     volume_type=volume_type,
                     volume_id=volume_id
                 ).set(iops)
+
+                # database storage
+                try:
+                    self.db_service.insert_volumes_utilization_metric(
+                        timestamp, self.sysplex_name, lpar_config.name, volume_type, volume_id, utilization
+                    )
+                    self.db_service.insert_volumes_iops_metric(
+                        timestamp, self.sysplex_name, lpar_config.name, volume_type, volume_id, iops
+                    )
+                except Exception as e:
+                    logger.error(f"Error storing volumes metrics to database: {e}")
+
     
     async def update_all_metrics(self):
         """Update all metrics for all LPARs"""

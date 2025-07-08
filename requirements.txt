@@ -4,3 +4,4 @@ prometheus_client
 python-multipart
 pydantic
 pydantic-settings
+mysql-connector-python
