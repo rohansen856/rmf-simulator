@@ -1,4 +1,4 @@
-version: '3.8'
+version: '3.9'
 
 services:
   rmf-simulator:
@@ -9,6 +9,7 @@ services:
       - PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus_multiproc_dir
       - LOG_LEVEL=INFO
 
+      # MySQL Configuration
       - MYSQL_HOST=mysql
       - MYSQL_PORT=3306
       - MYSQL_DATABASE=rmf_monitoring
@@ -16,12 +17,21 @@ services:
       - MYSQL_PASSWORD=rmf_password
       - MYSQL_ROOT_PASSWORD=root_password
 
+      # MongoDB Configuration
       - MONGO_HOST=mongodb
       - MONGO_PORT=27017
       - MONGO_DATABASE=rmf_monitoring
       - MONGO_USERNAME=rmf_user
       - MONGO_PASSWORD=rmf_password
       - MONGO_AUTH_SOURCE=rmf_monitoring
+
+      # S3/MinIO Configuration
+      - S3_ENDPOINT_URL=http://minio:9000
+      - S3_ACCESS_KEY=rmf_user
+      - S3_SECRET_KEY=rmf_password123
+      - S3_BUCKET_NAME=rmf-metrics
+      - S3_REGION=us-east-1
+      - S3_USE_SSL=false
     volumes:
       - prometheus_data:/tmp/prometheus_multiproc_dir
     restart: no
@@ -30,6 +40,16 @@ services:
         condition: service_healthy
       mongodb:
         condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     networks:
       - monitoring
 
@@ -86,6 +106,67 @@ services:
       retries: 3
       start_period: 30s
     command: ["mongod", "--auth", "--bind_ip_all"]
+
+  # MinIO S3-compatible storage
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin123
+      - MINIO_DEFAULT_BUCKETS=rmf-metrics
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    restart: no
+    networks:
+      - monitoring
+
+  # MinIO Client for bucket initialization
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      echo 'Waiting for MinIO to be ready...';
+      sleep 10;
+      /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin123;
+      /usr/bin/mc mb myminio/rmf-metrics --ignore-existing;
+      /usr/bin/mc anonymous set public myminio/rmf-metrics;
+      echo 'Creating rmf_user...';
+      /usr/bin/mc admin user add myminio rmf_user rmf_password123;
+      echo 'Attaching policies...';
+      /usr/bin/mc admin policy create myminio rmf-policy /tmp/policies.json;
+      /usr/bin/mc admin policy attach myminio rmf-policy --user rmf_user;
+      echo 'MinIO initialization completed! Exiting Successfully!';
+      exit 0;
+      "
+    volumes:
+      - ./minio-policies:/tmp
+    networks:
+      - monitoring
+
+  # Web UI for MinIO management
+  minio-console:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./minio-policies/nginx-minio.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - minio
+    restart: no
+    networks:
+      - monitoring
 
   prometheus:
     image: prom/prometheus:v2.47.0
@@ -146,6 +227,7 @@ networks:
 volumes:
   mysql_data:
   mongodb_data:
+  minio_data:
   prometheus_data:
   prometheus_storage:
   grafana_storage:
