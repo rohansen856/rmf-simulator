@@ -1,12 +1,15 @@
 from datetime import datetime
-from fastapi import APIRouter
+from typing import Optional
+from fastapi import APIRouter, HTTPException, Query
 from storage.mongodb.service import MongoDBService
 from utils.logger import logger
 from storage.mysql.service import DatabaseService
+from storage.S3.s3 import S3StorageService
 
 router = APIRouter()
 db = DatabaseService()
 mongo = MongoDBService()
+s3 = S3StorageService()
 
 @router.get("/database-summary")
 async def get_database_summary():
@@ -61,3 +64,77 @@ async def get_latest_mongodb_metrics(sysplex: str, lpar: str = None, limit: int 
         return {"metrics": metrics}
     except Exception as e:
         return {"error": str(e)}
+
+@router.get("/storage/s3/statistics")
+async def get_s3_statistics():
+    """Get S3 storage statistics"""
+    try:
+        stats = s3.get_storage_statistics()
+        return {
+            "status": "success",
+            "statistics": stats,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting S3 statistics: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get S3 statistics: {str(e)}")
+
+@router.get("/storage/s3/metrics/{metric_type}")
+async def get_s3_metrics(
+    metric_type: str,
+    sysplex: Optional[str] = Query(None),
+    lpar: Optional[str] = Query(None),
+    start_time: Optional[datetime] = Query(None),
+    end_time: Optional[datetime] = Query(None),
+    limit: int = Query(100, le=10000)
+):
+    """Retrieve metrics from S3 storage"""
+    try:
+        metrics = s3.retrieve_metrics(
+            metric_type=metric_type,
+            sysplex=sysplex,
+            lpar=lpar,
+            start_time=start_time,
+            end_time=end_time,
+            limit=limit
+        )
+        
+        return {
+            "status": "success",
+            "metric_type": metric_type,
+            "count": len(metrics),
+            "metrics": metrics,
+            "filters": {
+                "sysplex": sysplex,
+                "lpar": lpar,
+                "start_time": start_time.isoformat() if start_time else None,
+                "end_time": end_time.isoformat() if end_time else None,
+                "limit": limit
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error retrieving S3 metrics: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve metrics: {str(e)}")
+
+@router.post("/storage/s3/backup")
+async def create_s3_backup(backup_prefix: Optional[str] = None):
+    """Create a backup of all S3 data"""
+    try:
+        backup_key = s3.create_backup(backup_prefix)
+        
+        if backup_key:
+            return {
+                "status": "success",
+                "message": "Backup created successfully",
+                "backup_prefix": backup_key,
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Backup creation failed")
+            
+    except Exception as e:
+        logger.error(f"Error creating S3 backup: {e}")
+        raise HTTPException(status_code=500, detail=f"Backup failed: {str(e)}")
