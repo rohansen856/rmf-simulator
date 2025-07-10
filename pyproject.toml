@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "rmf-monitor-simulator"
+name = "rmf-simulator"
 version = "1.0.0"
 description = "RMF Monitor III Data Simulator for z/OS metrics"
 authors = ["Rohan Sen <rohansen856@gmail.com>"]

@@ -23,11 +23,11 @@ Thank you for considering contributing to the RMF Monitor III Data Simulator! Th
 
 ```bash
 # Fork the repository on GitHub, then clone your fork
-git clone https://github.com/YOUR_USERNAME/rmf-monitor-simulator.git
-cd rmf-monitor-simulator
+git clone https://github.com/YOUR_USERNAME/rmf-simulator.git
+cd rmf-simulator
 
 # Add upstream remote
-git remote add upstream https://github.com/original-org/rmf-monitor-simulator.git
+git remote add upstream https://github.com/original-org/rmf-simulator.git
 ```
 
 #### 2. Install Poetry
@@ -274,7 +274,7 @@ def calculate_cpu_utilization(
 ## 📁 Project Structure
 
 ```
-rmf-monitor-simulator/
+rmf-simulator/
 ├── app/
 │   ├── main.py                 # FastAPI application
 │   ├── models/                 # Data models
@@ -314,7 +314,7 @@ git checkout main
 git pull upstream main
 
 # Create feature branch
-git checkout -b feature/your-feature-name
+git checkout -b feature/feature-name
 
 # Or for bug fixes
 git checkout -b bugfix/issue-description
@@ -366,7 +366,7 @@ Types:
 
 ```bash
 # Push feature branch
-git push origin feature/your-feature-name
+git push origin feature/feature-name
 
 # Create pull request on GitHub
 ```

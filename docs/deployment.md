@@ -24,8 +24,8 @@ This guide covers deployment options for the RMF Monitor III Data Simulator acro
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/rmf-monitor-simulator.git
-cd rmf-monitor-simulator
+git clone https://github.com/rohansen856/rmf-simulator.git
+cd rmf-simulator
 
 # Start all services
 docker-compose up -d
@@ -164,7 +164,7 @@ kubectl get all -n rmf-monitoring
 
 ```bash
 # Add custom Helm chart repository
-helm repo add rmf-simulator https://your-org.github.io/rmf-simulator-charts
+helm repo add rmf-simulator https://rohansen856.github.io/rmf-simulator-charts
 
 # Install with custom values
 helm install rmf-simulator rmf-simulator/rmf-simulator \
@@ -1033,7 +1033,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/your-org/rmf-simulator
+    repoURL: https://github.com/rohansen856/rmf-simulator
     targetRevision: HEAD
     path: k8s/dr
   destination:
