@@ -1,8 +1,11 @@
 from datetime import datetime
+from time import time
 import random
+from typing import Any, Dict
 
 from metrices.definitions import CLPR_REQUEST_RATE, CLPR_SERVICE_TIME, CPU_UTILIZATION, LDEV_RESPONSE_TIME, LDEV_UTILIZATION, MEMORY_USAGE, MPB_PROCESSING_RATE, MPB_QUEUE_DEPTH, PORTS_THROUGHPUT, PORTS_UTILIZATION, VOLUMES_IOPS, VOLUMES_UTILIZATION
 from models.lpar import LPARConfig
+from storage.S3.s3 import S3StorageService
 from storage.mysql.service import DatabaseService
 from storage.mongodb.service import MongoDBService
 from utils.logger import logger
@@ -17,6 +20,11 @@ class MainframeSimulator:
         self.trend_factors = {}
         self.db_service = DatabaseService()
         self.mongo_service = MongoDBService()
+        self.s3_service = S3StorageService()
+        self.s3_batch_buffer = []
+        self.s3_batch_size = 50  # Number of metrics to batch before writing
+        self.last_s3_flush = time()
+        self.s3_flush_interval = 60  # Flush every 60 seconds even if batch not full
         self.initialize_baselines()
     
     def initialize_baselines(self):
@@ -59,6 +67,31 @@ class MainframeSimulator:
         
         return peak_factor * weekday_factor * month_end_factor * noise_factor
     
+    def _store_metric_to_storages(self, metric_data: Dict[str, Any]):
+        """Store metric data to all enabled storage systems"""
+        # Add to S3 batch buffer
+        if self.s3_service:
+            self.s3_batch_buffer.append(metric_data)
+            
+            # Check if we need to flush the batch
+            current_time = time.time()
+            if (len(self.s3_batch_buffer) >= self.s3_batch_size or 
+                current_time - self.last_s3_flush > self.s3_flush_interval):
+                self._flush_s3_batch()
+    
+    def _flush_s3_batch(self):
+        """Flush the S3 batch buffer"""
+        if not self.s3_service or not self.s3_batch_buffer:
+            return
+        
+        try:
+            self.s3_service.batch_store_metrics(self.s3_batch_buffer)
+            logger.debug(f"Flushed {len(self.s3_batch_buffer)} metrics to S3")
+            self.s3_batch_buffer.clear()
+            self.last_s3_flush = time.time()
+        except Exception as e:
+            logger.error(f"Error flushing S3 batch: {e}")
+    
     def simulate_cpu_metrics(self, lpar_config: LPARConfig):
         """Generate realistic CPU metrics"""
         time_factor = self.get_time_factor(lpar_config)
@@ -98,7 +131,7 @@ class MainframeSimulator:
             self.db_service.insert_cpu_metric(timestamp, self.sysplex_name, lpar_config.name, "zaap", zaap_util)
         except Exception as e:
             logger.error(f"Error storing CPU metrics to database: {e}")
-        
+
         # MongoDB storage
         try:
             self.mongo_service.insert_cpu_metric(timestamp, self.sysplex_name, lpar_config.name, "general_purpose", gp_util)
@@ -106,6 +139,37 @@ class MainframeSimulator:
             self.mongo_service.insert_cpu_metric(timestamp, self.sysplex_name, lpar_config.name, "zaap", zaap_util)
         except Exception as e:
             logger.error(f"Error storing CPU metrics to MongoDB: {e}")
+
+        # S3 storage (batched)
+        cpu_metrics = [
+            {
+                'timestamp': timestamp.isoformat(),
+                'sysplex': self.sysplex_name,
+                'lpar': lpar_config.name,
+                'cpu_type': 'general_purpose',
+                'utilization_percent': gp_util,
+                'metric_type': 'cpu_utilization'
+            },
+            {
+                'timestamp': timestamp.isoformat(),
+                'sysplex': self.sysplex_name,
+                'lpar': lpar_config.name,
+                'cpu_type': 'ziip',
+                'utilization_percent': ziip_util,
+                'metric_type': 'cpu_utilization'
+            },
+            {
+                'timestamp': timestamp.isoformat(),
+                'sysplex': self.sysplex_name,
+                'lpar': lpar_config.name,
+                'cpu_type': 'zaap',
+                'utilization_percent': zaap_util,
+                'metric_type': 'cpu_utilization'
+            }
+        ]
+        
+        for metric in cpu_metrics:
+            self._store_metric_to_storages(metric)
 
         logger.debug(f"CPU metrics updated for {lpar_config.name}: GP={gp_util:.1f}%, zIIP={ziip_util:.1f}%")
     
@@ -160,6 +224,37 @@ class MainframeSimulator:
             self.mongo_service.insert_memory_metric(timestamp, self.sysplex_name, lpar_config.name, "csa", csa_memory)
         except Exception as e:
             logger.error(f"Error storing memory metrics to MongoDB: {e}")
+
+        # S3 storage (batched)
+        memory_metrics = [
+            {
+                'timestamp': timestamp.isoformat(),
+                'sysplex': self.sysplex_name,
+                'lpar': lpar_config.name,
+                'memory_type': 'real_storage',
+                'usage_bytes': used_memory,
+                'metric_type': 'memory_usage'
+            },
+            {
+                'timestamp': timestamp.isoformat(),
+                'sysplex': self.sysplex_name,
+                'lpar': lpar_config.name,
+                'memory_type': 'virtual_storage',
+                'usage_bytes': virtual_memory,
+                'metric_type': 'memory_usage'
+            },
+            {
+                'timestamp': timestamp.isoformat(),
+                'sysplex': self.sysplex_name,
+                'lpar': lpar_config.name,
+                'memory_type': 'csa',
+                'usage_bytes': csa_memory,
+                'metric_type': 'memory_usage'
+            }
+        ]
+        
+        for metric in memory_metrics:
+            self._store_metric_to_storages(metric)
     
     def simulate_ldev_metrics(self, lpar_config: LPARConfig):
         """Generate realistic LDEV (storage device) metrics"""
@@ -174,6 +269,7 @@ class MainframeSimulator:
         }
         
         timestamp = datetime.now()
+        ldev_metrics = []
         for device_type, config in device_types.items():
             for i in range(config["count"]):
                 device_id = f"{device_type}_{i:02d}"
@@ -209,7 +305,7 @@ class MainframeSimulator:
                     )
                 except Exception as e:
                     logger.error(f"Error storing LDEV metrics to database: {e}")
-                
+
                 # MongoDB storage
                 try:
                     self.mongo_service.insert_ldev_response_time_metric(
@@ -220,6 +316,29 @@ class MainframeSimulator:
                     )
                 except Exception as e:
                     logger.error(f"Error storing LDEV metrics to MongoDB: {e}")
+
+                # Prepare metrics for batch storage
+                ldev_metrics.extend([
+                    {
+                        'timestamp': timestamp.isoformat(),
+                        'sysplex': self.sysplex_name,
+                        'lpar': lpar_config.name,
+                        'device_type': device_type,
+                        'response_time_seconds': response_time / 1000.0,
+                        'metric_type': 'ldev_response_time'
+                    },
+                    {
+                        'timestamp': timestamp.isoformat(),
+                        'sysplex': self.sysplex_name,
+                        'lpar': lpar_config.name,
+                        'device_id': device_id,
+                        'utilization_percent': utilization,
+                        'metric_type': 'ldev_utilization'
+                    }
+                ])
+        # S3 storage (batched)
+        for metric in ldev_metrics:
+            self._store_metric_to_storages(metric)
     
     def simulate_clpr_metrics(self, lpar_config: LPARConfig):
         """Generate realistic Coupling Facility Link Performance metrics"""
@@ -230,6 +349,7 @@ class MainframeSimulator:
         cf_links = [f"CF{i:02d}" for i in range(1, 5)]
         
         timestamp = datetime.now()
+        clpr_metrics = []
         for cf_link in cf_links:
             # Service time (microseconds)
             service_time = base_service_time * time_factor * (1 + random.uniform(-0.3, 0.5))
@@ -286,6 +406,39 @@ class MainframeSimulator:
                 )
             except Exception as e:
                 logger.error(f"Error storing CLPR metrics to MongoDB: {e}")
+
+            # Prepare metrics for batch storage
+            clpr_metrics.extend([
+                {
+                    'timestamp': timestamp.isoformat(),
+                    'sysplex': self.sysplex_name,
+                    'lpar': lpar_config.name,
+                    'cf_link': cf_link,
+                    'service_time_microseconds': service_time,
+                    'metric_type': 'clpr_service_time'
+                },
+                {
+                    'timestamp': timestamp.isoformat(),
+                    'sysplex': self.sysplex_name,
+                    'lpar': lpar_config.name,
+                    'cf_link': cf_link,
+                    'request_type': 'synchronous',
+                    'request_rate': sync_rate,
+                    'metric_type': 'clpr_request_rate'
+                },
+                {
+                    'timestamp': timestamp.isoformat(),
+                    'sysplex': self.sysplex_name,
+                    'lpar': lpar_config.name,
+                    'cf_link': cf_link,
+                    'request_type': 'asynchronous',
+                    'request_rate': async_rate,
+                    'metric_type': 'clpr_request_rate'
+                }
+            ])
+        # S3 storage (batched)
+        for metric in clpr_metrics:
+            self._store_metric_to_storages(metric)
     
     def simulate_mpb_metrics(self, lpar_config: LPARConfig):
         """Generate realistic Message Processing Block metrics"""
@@ -294,6 +447,7 @@ class MainframeSimulator:
         queue_types = ["CICS", "IMS", "MQ", "BATCH"]
         
         timestamp = datetime.now()
+        mpb_metrics = []
         for queue_type in queue_types:
             # Processing rate varies by queue type and workload
             base_rate = {
@@ -342,6 +496,29 @@ class MainframeSimulator:
                 )
             except Exception as e:
                 logger.error(f"Error storing MPB metrics to MongoDB: {e}")
+
+            # Prepare metrics for batch storage
+            mpb_metrics.extend([
+                {
+                    'timestamp': timestamp.isoformat(),
+                    'sysplex': self.sysplex_name,
+                    'lpar': lpar_config.name,
+                    'queue_type': queue_type,
+                    'processing_rate': processing_rate,
+                    'metric_type': 'mpb_processing_rate'
+                },
+                {
+                    'timestamp': timestamp.isoformat(),
+                    'sysplex': self.sysplex_name,
+                    'lpar': lpar_config.name,
+                    'queue_type': queue_type,
+                    'queue_depth': queue_depth,
+                    'metric_type': 'mpb_queue_depth'
+                }
+            ])
+        # S3 storage (batched)
+        for metric in mpb_metrics:
+            self._store_metric_to_storages(metric)
     
     def simulate_ports_metrics(self, lpar_config: LPARConfig):
         """Generate realistic port utilization and throughput metrics"""
@@ -354,6 +531,7 @@ class MainframeSimulator:
         }
         
         timestamp = datetime.now()
+        ports_metrics = []
         for port_type, config in port_types.items():
             for i in range(config["count"]):
                 port_id = f"{port_type}_{i:02d}"
@@ -390,7 +568,7 @@ class MainframeSimulator:
                     )
                 except Exception as e:
                     logger.error(f"Error storing ports metrics to database: {e}")
-                
+
                 # MongoDB storage
                 try:
                     self.mongo_service.insert_ports_utilization_metric(
@@ -401,6 +579,31 @@ class MainframeSimulator:
                     )
                 except Exception as e:
                     logger.error(f"Error storing ports metrics to MongoDB: {e}")
+
+                # Prepare metrics for batch storage
+                ports_metrics.extend([
+                    {
+                        'timestamp': timestamp.isoformat(),
+                        'sysplex': self.sysplex_name,
+                        'lpar': lpar_config.name,
+                        'port_type': port_type,
+                        'port_id': port_id,
+                        'utilization_percent': utilization,
+                        'metric_type': 'ports_utilization'
+                    },
+                    {
+                        'timestamp': timestamp.isoformat(),
+                        'sysplex': self.sysplex_name,
+                        'lpar': lpar_config.name,
+                        'port_type': port_type,
+                        'port_id': port_id,
+                        'throughput_mbps': throughput,
+                        'metric_type': 'ports_throughput'
+                    }
+                ])
+        # S3 storage (batched)
+        for metric in ports_metrics:
+            self._store_metric_to_storages(metric)
 
     
     def simulate_volumes_metrics(self, lpar_config: LPARConfig):
@@ -415,6 +618,7 @@ class MainframeSimulator:
         }
         
         timestamp = datetime.now()
+        volumes_metrics = []
         for volume_type, config in volume_types.items():
             for i in range(config["count"]):
                 volume_id = f"{volume_type}{i:03d}"
@@ -463,6 +667,30 @@ class MainframeSimulator:
                 except Exception as e:
                     logger.error(f"Error storing volumes metrics to MongoDB: {e}")
 
+                # Prepare metrics for batch storage
+                volumes_metrics.extend([
+                    {
+                        'timestamp': timestamp.isoformat(),
+                        'sysplex': self.sysplex_name,
+                        'lpar': lpar_config.name,
+                        'volume_type': volume_type,
+                        'volume_id': volume_id,
+                        'utilization_percent': utilization,
+                        'metric_type': 'volumes_utilization'
+                    },
+                    {
+                        'timestamp': timestamp.isoformat(),
+                        'sysplex': self.sysplex_name,
+                        'lpar': lpar_config.name,
+                        'volume_type': volume_type,
+                        'volume_id': volume_id,
+                        'iops': iops,
+                        'metric_type': 'volumes_iops'
+                    }
+                ])
+        # S3 storage (batched)
+        for metric in volumes_metrics:
+            self._store_metric_to_storages(metric)
     
     async def update_all_metrics(self):
         """Update all metrics for all LPARs"""
@@ -479,6 +707,9 @@ class MainframeSimulator:
                 logger.debug(f"Updated metrics for {lpar_config.name}")
             except Exception as e:
                 logger.error(f"Error updating metrics for {lpar_config.name}: {e}")
+        
+        # Force flush S3 batch after each complete update cycle
+        self._flush_s3_batch()
 
 # Initialize simulator
 simulator = MainframeSimulator()
