@@ -6,3 +6,5 @@ pydantic
 pydantic-settings
 mysql-connector-python
 pymongo
+boto3
+pandas
