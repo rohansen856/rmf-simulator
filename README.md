@@ -75,8 +75,8 @@ The simulator generates metrics every 15 seconds, storing them simultaneously ac
 ### One-Command Deployment
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/rmf-monitor-simulator.git
-cd rmf-monitor-simulator
+git clone https://github.com/rohansen856/rmf-simulator.git
+cd rmf-simulator
 
 # Start the complete stack
 docker-compose up -d
@@ -280,8 +280,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🆘 Support
 
 - **Documentation**: [docs/](docs/)
-- **Issues**: [GitHub Issues](https://github.com/your-org/rmf-monitor-simulator/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-org/rmf-monitor-simulator/discussions)
+- **Issues**: [GitHub Issues](https://github.com/rohansen856/rmf-simulator/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/rohansen856/rmf-simulator/discussions)
 
 ## 🙏 Acknowledgments
 

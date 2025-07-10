@@ -49,7 +49,7 @@ ALERTMANAGER_API_PATH=/api/v1         # API path
 
 ```bash
 # Authentication Settings
-JWT_SECRET_KEY=your-super-secret-key  # JWT signing key
+JWT_SECRET_KEY=super-secret-key  # JWT signing key
 JWT_ALGORITHM=HS256                   # JWT algorithm
 JWT_EXPIRATION_HOURS=24              # Token expiration time
 API_KEY_HEADER=X-API-Key             # API key header name
