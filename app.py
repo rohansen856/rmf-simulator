@@ -3,6 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from metrices.updater import start_updater
 from utils.logger import logger
 from routes import health, metrics, system, storage
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI(
     title="RMF Monitor III Data Simulator",
