@@ -101,14 +101,13 @@ class MainframeSimulator:
         """Store metric data to all enabled storage systems"""
         # Add to S3 batch buffer
         if self.s3_service:
-            if self.s3_service:
-                self.s3_batch_buffer.append(metric_data)
-                
-                # Check if we need to flush the batch
-                current_time = time.time()
-                if (len(self.s3_batch_buffer) >= self.s3_batch_size or 
-                    current_time - self.last_s3_flush > self.s3_flush_interval):
-                    self._flush_s3_batch()
+            self.s3_batch_buffer.append(metric_data)
+            
+            # Check if we need to flush the batch
+            current_time = time.time()
+            if (len(self.s3_batch_buffer) >= self.s3_batch_size or 
+                current_time - self.last_s3_flush > self.s3_flush_interval):
+                self._flush_s3_batch()
     
     def _flush_s3_batch(self):
         """Flush the S3 batch buffer"""
