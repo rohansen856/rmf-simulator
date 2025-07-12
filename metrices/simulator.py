@@ -13,19 +13,23 @@ from utils.confiig import LPAR_CONFIGS
 
 
 class MainframeSimulator:
-    def __init__(self):
+    def __init__(self, enable_mysql: bool = True, enable_mongodb: bool = True, enable_s3: bool = True):
         self.sysplex_name = "SYSPLEX01"
         self.start_time = datetime.now()
         self.base_values = {}
         self.trend_factors = {}
-        self.db_service = DatabaseService()
-        self.mongo_service = MongoDBService()
-        self.s3_service = S3StorageService()
+
+        self.db_service = None
+        self.mongo_service = None
+        self.s3_service = None
+
         self.s3_batch_buffer = []
         self.s3_batch_size = 50  # Number of metrics to batch before writing
         self.last_s3_flush = time()
         self.s3_flush_interval = 60  # Flush every 60 seconds even if batch not full
+
         self.initialize_baselines()
+        self._initialize_storage_services(enable_mysql, enable_mongodb, enable_s3)
     
     def initialize_baselines(self):
         """Initialize baseline values for realistic simulation"""
@@ -43,7 +47,33 @@ class MainframeSimulator:
                 'weekly_cycle': random.uniform(0.9, 1.1),
                 'monthly_cycle': random.uniform(0.95, 1.05),
             }
-    
+
+    def _initialize_storage_services(self, enable_mysql: bool, enable_mongodb: bool, enable_s3: bool):
+        """Initialize storage services based on configuration"""
+        try:
+            if enable_mysql:
+                self.db_service = DatabaseService()
+                logger.info("MySQL storage service initialized")
+        except Exception as e:
+            logger.error(f"Failed to initialize MySQL service: {e}")
+            self.db_service = None
+        
+        try:
+            if enable_mongodb:
+                self.mongo_service = MongoDBService()
+                logger.info("MongoDB storage service initialized")
+        except Exception as e:
+            logger.error(f"Failed to initialize MongoDB service: {e}")
+            self.mongo_service = None
+        
+        try:
+            if enable_s3:
+                self.s3_service = S3StorageService()
+                logger.info("S3 storage service initialized")
+        except Exception as e:
+            logger.error(f"Failed to initialize S3 service: {e}")
+            self.s3_service = None
+
     def get_time_factor(self, lpar_config: LPARConfig) -> float:
         """Calculate time-based performance factor"""
         now = datetime.now()
@@ -125,20 +155,22 @@ class MainframeSimulator:
 
         # database storage
         timestamp = datetime.now()
-        try:
-            self.db_service.insert_cpu_metric(timestamp, self.sysplex_name, lpar_config.name, "general_purpose", gp_util)
-            self.db_service.insert_cpu_metric(timestamp, self.sysplex_name, lpar_config.name, "ziip", ziip_util)
-            self.db_service.insert_cpu_metric(timestamp, self.sysplex_name, lpar_config.name, "zaap", zaap_util)
-        except Exception as e:
-            logger.error(f"Error storing CPU metrics to database: {e}")
+        if self.db_service:
+            try:
+                self.db_service.insert_cpu_metric(timestamp, self.sysplex_name, lpar_config.name, "general_purpose", gp_util)
+                self.db_service.insert_cpu_metric(timestamp, self.sysplex_name, lpar_config.name, "ziip", ziip_util)
+                self.db_service.insert_cpu_metric(timestamp, self.sysplex_name, lpar_config.name, "zaap", zaap_util)
+            except Exception as e:
+                logger.error(f"Error storing CPU metrics to database: {e}")
 
         # MongoDB storage
-        try:
-            self.mongo_service.insert_cpu_metric(timestamp, self.sysplex_name, lpar_config.name, "general_purpose", gp_util)
-            self.mongo_service.insert_cpu_metric(timestamp, self.sysplex_name, lpar_config.name, "ziip", ziip_util)
-            self.mongo_service.insert_cpu_metric(timestamp, self.sysplex_name, lpar_config.name, "zaap", zaap_util)
-        except Exception as e:
-            logger.error(f"Error storing CPU metrics to MongoDB: {e}")
+        if self.mongo_service:
+            try:
+                self.mongo_service.insert_cpu_metric(timestamp, self.sysplex_name, lpar_config.name, "general_purpose", gp_util)
+                self.mongo_service.insert_cpu_metric(timestamp, self.sysplex_name, lpar_config.name, "ziip", ziip_util)
+                self.mongo_service.insert_cpu_metric(timestamp, self.sysplex_name, lpar_config.name, "zaap", zaap_util)
+            except Exception as e:
+                logger.error(f"Error storing CPU metrics to MongoDB: {e}")
 
         # S3 storage (batched)
         cpu_metrics = [
@@ -210,20 +242,22 @@ class MainframeSimulator:
 
         # database storage
         timestamp = datetime.now()
-        try:
-            self.db_service.insert_memory_metric(timestamp, self.sysplex_name, lpar_config.name, "real_storage", used_memory)
-            self.db_service.insert_memory_metric(timestamp, self.sysplex_name, lpar_config.name, "virtual_storage", virtual_memory)
-            self.db_service.insert_memory_metric(timestamp, self.sysplex_name, lpar_config.name, "csa", csa_memory)
-        except Exception as e:
-            logger.error(f"Error storing memory metrics to database: {e}")
+        if self.db_service:
+            try:
+                self.db_service.insert_memory_metric(timestamp, self.sysplex_name, lpar_config.name, "real_storage", used_memory)
+                self.db_service.insert_memory_metric(timestamp, self.sysplex_name, lpar_config.name, "virtual_storage", virtual_memory)
+                self.db_service.insert_memory_metric(timestamp, self.sysplex_name, lpar_config.name, "csa", csa_memory)
+            except Exception as e:
+                logger.error(f"Error storing memory metrics to database: {e}")
 
         # MongoDB storage
-        try:
-            self.mongo_service.insert_memory_metric(timestamp, self.sysplex_name, lpar_config.name, "real_storage", used_memory)
-            self.mongo_service.insert_memory_metric(timestamp, self.sysplex_name, lpar_config.name, "virtual_storage", virtual_memory)
-            self.mongo_service.insert_memory_metric(timestamp, self.sysplex_name, lpar_config.name, "csa", csa_memory)
-        except Exception as e:
-            logger.error(f"Error storing memory metrics to MongoDB: {e}")
+        if self.mongo_service:
+            try:
+                self.mongo_service.insert_memory_metric(timestamp, self.sysplex_name, lpar_config.name, "real_storage", used_memory)
+                self.mongo_service.insert_memory_metric(timestamp, self.sysplex_name, lpar_config.name, "virtual_storage", virtual_memory)
+                self.mongo_service.insert_memory_metric(timestamp, self.sysplex_name, lpar_config.name, "csa", csa_memory)
+            except Exception as e:
+                logger.error(f"Error storing memory metrics to MongoDB: {e}")
 
         # S3 storage (batched)
         memory_metrics = [
@@ -296,26 +330,28 @@ class MainframeSimulator:
                 ).set(utilization)
 
                 # database storage
-                try:
-                    self.db_service.insert_ldev_response_time_metric(
+                if self.db_service:
+                    try:
+                        self.db_service.insert_ldev_response_time_metric(
                         timestamp, self.sysplex_name, lpar_config.name, device_type, response_time / 1000.0
-                    )
-                    self.db_service.insert_ldev_utilization_metric(
-                        timestamp, self.sysplex_name, lpar_config.name, device_id, utilization
-                    )
-                except Exception as e:
-                    logger.error(f"Error storing LDEV metrics to database: {e}")
+                        )
+                        self.db_service.insert_ldev_utilization_metric(
+                            timestamp, self.sysplex_name, lpar_config.name, device_id, utilization
+                        )
+                    except Exception as e:
+                        logger.error(f"Error storing LDEV metrics to database: {e}")
 
                 # MongoDB storage
-                try:
-                    self.mongo_service.insert_ldev_response_time_metric(
-                        timestamp, self.sysplex_name, lpar_config.name, device_type, response_time / 1000.0
-                    )
-                    self.mongo_service.insert_ldev_utilization_metric(
-                        timestamp, self.sysplex_name, lpar_config.name, device_id, utilization
-                    )
-                except Exception as e:
-                    logger.error(f"Error storing LDEV metrics to MongoDB: {e}")
+                if self.mongo_service:
+                    try:
+                        self.mongo_service.insert_ldev_response_time_metric(
+                            timestamp, self.sysplex_name, lpar_config.name, device_type, response_time / 1000.0
+                        )
+                        self.mongo_service.insert_ldev_utilization_metric(
+                            timestamp, self.sysplex_name, lpar_config.name, device_id, utilization
+                        )
+                    except Exception as e:
+                        logger.error(f"Error storing LDEV metrics to MongoDB: {e}")
 
                 # Prepare metrics for batch storage
                 ldev_metrics.extend([
@@ -380,32 +416,34 @@ class MainframeSimulator:
             ).set(async_rate)
 
             # database storage
-            try:
-                self.db_service.insert_clpr_service_time_metric(
-                    timestamp, self.sysplex_name, lpar_config.name, cf_link, service_time
-                )
-                self.db_service.insert_clpr_request_rate_metric(
-                    timestamp, self.sysplex_name, lpar_config.name, cf_link, "synchronous", sync_rate
-                )
-                self.db_service.insert_clpr_request_rate_metric(
-                    timestamp, self.sysplex_name, lpar_config.name, cf_link, "asynchronous", async_rate
-                )
-            except Exception as e:
-                logger.error(f"Error storing CLPR metrics to database: {e}")
+            if self.db_service:
+                try:
+                    self.db_service.insert_clpr_service_time_metric(
+                        timestamp, self.sysplex_name, lpar_config.name, cf_link, service_time
+                    )
+                    self.db_service.insert_clpr_request_rate_metric(
+                        timestamp, self.sysplex_name, lpar_config.name, cf_link, "synchronous", sync_rate
+                    )
+                    self.db_service.insert_clpr_request_rate_metric(
+                        timestamp, self.sysplex_name, lpar_config.name, cf_link, "asynchronous", async_rate
+                    )
+                except Exception as e:
+                    logger.error(f"Error storing CLPR metrics to database: {e}")
 
             # MongoDB storage
-            try:
-                self.mongo_service.insert_clpr_service_time_metric(
-                    timestamp, self.sysplex_name, lpar_config.name, cf_link, service_time
-                )
-                self.mongo_service.insert_clpr_request_rate_metric(
-                    timestamp, self.sysplex_name, lpar_config.name, cf_link, "synchronous", sync_rate
-                )
-                self.mongo_service.insert_clpr_request_rate_metric(
-                    timestamp, self.sysplex_name, lpar_config.name, cf_link, "asynchronous", async_rate
-                )
-            except Exception as e:
-                logger.error(f"Error storing CLPR metrics to MongoDB: {e}")
+            if self.mongo_service:
+                try:
+                    self.mongo_service.insert_clpr_service_time_metric(
+                        timestamp, self.sysplex_name, lpar_config.name, cf_link, service_time
+                    )
+                    self.mongo_service.insert_clpr_request_rate_metric(
+                        timestamp, self.sysplex_name, lpar_config.name, cf_link, "synchronous", sync_rate
+                    )
+                    self.mongo_service.insert_clpr_request_rate_metric(
+                        timestamp, self.sysplex_name, lpar_config.name, cf_link, "asynchronous", async_rate
+                    )
+                except Exception as e:
+                    logger.error(f"Error storing CLPR metrics to MongoDB: {e}")
 
             # Prepare metrics for batch storage
             clpr_metrics.extend([
@@ -476,26 +514,28 @@ class MainframeSimulator:
             ).set(queue_depth)
 
             # database storage
-            try:
-                self.db_service.insert_mpb_processing_rate_metric(
-                    timestamp, self.sysplex_name, lpar_config.name, queue_type, processing_rate
-                )
-                self.db_service.insert_mpb_queue_depth_metric(
-                    timestamp, self.sysplex_name, lpar_config.name, queue_type, queue_depth
-                )
-            except Exception as e:
-                logger.error(f"Error storing MPB metrics to database: {e}")
+            if self.db_service:
+                try:
+                    self.db_service.insert_mpb_processing_rate_metric(
+                        timestamp, self.sysplex_name, lpar_config.name, queue_type, processing_rate
+                    )
+                    self.db_service.insert_mpb_queue_depth_metric(
+                        timestamp, self.sysplex_name, lpar_config.name, queue_type, queue_depth
+                    )
+                except Exception as e:
+                    logger.error(f"Error storing MPB metrics to database: {e}")
 
             # MongoDB storage
-            try:
-                self.mongo_service.insert_mpb_processing_rate_metric(
-                    timestamp, self.sysplex_name, lpar_config.name, queue_type, processing_rate
-                )
-                self.mongo_service.insert_mpb_queue_depth_metric(
-                    timestamp, self.sysplex_name, lpar_config.name, queue_type, queue_depth
-                )
-            except Exception as e:
-                logger.error(f"Error storing MPB metrics to MongoDB: {e}")
+            if self.mongo_service:
+                try:
+                    self.mongo_service.insert_mpb_processing_rate_metric(
+                        timestamp, self.sysplex_name, lpar_config.name, queue_type, processing_rate
+                    )
+                    self.mongo_service.insert_mpb_queue_depth_metric(
+                        timestamp, self.sysplex_name, lpar_config.name, queue_type, queue_depth
+                    )
+                except Exception as e:
+                    logger.error(f"Error storing MPB metrics to MongoDB: {e}")
 
             # Prepare metrics for batch storage
             mpb_metrics.extend([
@@ -559,26 +599,28 @@ class MainframeSimulator:
                 ).set(throughput)
 
                 # database storage
-                try:
-                    self.db_service.insert_ports_utilization_metric(
-                        timestamp, self.sysplex_name, lpar_config.name, port_type, port_id, utilization
-                    )
-                    self.db_service.insert_ports_throughput_metric(
-                        timestamp, self.sysplex_name, lpar_config.name, port_type, port_id, throughput
-                    )
-                except Exception as e:
-                    logger.error(f"Error storing ports metrics to database: {e}")
+                if self.db_service:
+                    try:
+                        self.db_service.insert_ports_utilization_metric(
+                            timestamp, self.sysplex_name, lpar_config.name, port_type, port_id, utilization
+                        )
+                        self.db_service.insert_ports_throughput_metric(
+                            timestamp, self.sysplex_name, lpar_config.name, port_type, port_id, throughput
+                        )
+                    except Exception as e:
+                        logger.error(f"Error storing ports metrics to database: {e}")
 
                 # MongoDB storage
-                try:
-                    self.mongo_service.insert_ports_utilization_metric(
-                        timestamp, self.sysplex_name, lpar_config.name, port_type, port_id, utilization
-                    )
-                    self.mongo_service.insert_ports_throughput_metric(
-                        timestamp, self.sysplex_name, lpar_config.name, port_type, port_id, throughput
-                    )
-                except Exception as e:
-                    logger.error(f"Error storing ports metrics to MongoDB: {e}")
+                if self.mongo_service:
+                    try:
+                        self.mongo_service.insert_ports_utilization_metric(
+                            timestamp, self.sysplex_name, lpar_config.name, port_type, port_id, utilization
+                        )
+                        self.mongo_service.insert_ports_throughput_metric(
+                            timestamp, self.sysplex_name, lpar_config.name, port_type, port_id, throughput
+                        )
+                    except Exception as e:
+                        logger.error(f"Error storing ports metrics to MongoDB: {e}")
 
                 # Prepare metrics for batch storage
                 ports_metrics.extend([
@@ -646,26 +688,28 @@ class MainframeSimulator:
                 ).set(iops)
 
                 # database storage
-                try:
-                    self.db_service.insert_volumes_utilization_metric(
-                        timestamp, self.sysplex_name, lpar_config.name, volume_type, volume_id, utilization
-                    )
-                    self.db_service.insert_volumes_iops_metric(
-                        timestamp, self.sysplex_name, lpar_config.name, volume_type, volume_id, iops
-                    )
-                except Exception as e:
-                    logger.error(f"Error storing volumes metrics to database: {e}")
+                if self.db_service:
+                    try:
+                        self.db_service.insert_volumes_utilization_metric(
+                            timestamp, self.sysplex_name, lpar_config.name, volume_type, volume_id, utilization
+                        )
+                        self.db_service.insert_volumes_iops_metric(
+                            timestamp, self.sysplex_name, lpar_config.name, volume_type, volume_id, iops
+                        )
+                    except Exception as e:
+                        logger.error(f"Error storing volumes metrics to database: {e}")
 
                 # MongoDB storage
-                try:
-                    self.mongo_service.insert_volumes_utilization_metric(
-                        timestamp, self.sysplex_name, lpar_config.name, volume_type, volume_id, utilization
-                    )
-                    self.mongo_service.insert_volumes_iops_metric(
-                        timestamp, self.sysplex_name, lpar_config.name, volume_type, volume_id, iops
-                    )
-                except Exception as e:
-                    logger.error(f"Error storing volumes metrics to MongoDB: {e}")
+                if self.mongo_service:
+                    try:
+                        self.mongo_service.insert_volumes_utilization_metric(
+                            timestamp, self.sysplex_name, lpar_config.name, volume_type, volume_id, utilization
+                        )
+                        self.mongo_service.insert_volumes_iops_metric(
+                            timestamp, self.sysplex_name, lpar_config.name, volume_type, volume_id, iops
+                        )
+                    except Exception as e:
+                        logger.error(f"Error storing volumes metrics to MongoDB: {e}")
 
                 # Prepare metrics for batch storage
                 volumes_metrics.extend([
@@ -712,4 +756,8 @@ class MainframeSimulator:
         self._flush_s3_batch()
 
 # Initialize simulator
-simulator = MainframeSimulator()
+simulator = MainframeSimulator(
+    enable_mysql=False,
+    enable_mongodb=False,
+    enable_s3=False
+)
