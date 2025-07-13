@@ -1,5 +1,5 @@
 from datetime import datetime
-from time import time
+import os
 import random
 from typing import Any, Dict
 
@@ -25,7 +25,7 @@ class MainframeSimulator:
 
         self.s3_batch_buffer = []
         self.s3_batch_size = 50  # Number of metrics to batch before writing
-        self.last_s3_flush = time()
+        self.last_s3_flush = datetime.now()
         self.s3_flush_interval = 60  # Flush every 60 seconds even if batch not full
 
         self.initialize_baselines()
@@ -104,9 +104,9 @@ class MainframeSimulator:
             self.s3_batch_buffer.append(metric_data)
             
             # Check if we need to flush the batch
-            current_time = time.time()
+            current_time = datetime.now()
             if (len(self.s3_batch_buffer) >= self.s3_batch_size or 
-                current_time - self.last_s3_flush > self.s3_flush_interval):
+                (current_time - self.last_s3_flush).total_seconds() > self.s3_flush_interval):
                 self._flush_s3_batch()
     
     def _flush_s3_batch(self):
@@ -118,7 +118,7 @@ class MainframeSimulator:
             self.s3_service.batch_store_metrics(self.s3_batch_buffer)
             logger.debug(f"Flushed {len(self.s3_batch_buffer)} metrics to S3")
             self.s3_batch_buffer.clear()
-            self.last_s3_flush = time.time()
+            self.last_s3_flush = datetime.now()
         except Exception as e:
             logger.error(f"Error flushing S3 batch: {e}")
     
@@ -757,7 +757,7 @@ class MainframeSimulator:
 
 # Initialize simulator
 simulator = MainframeSimulator(
-    enable_mysql=False,
-    enable_mongodb=False,
-    enable_s3=False
+    enable_mysql=os.getenv("ENABLE_MYSQL") == "true",
+    enable_mongodb=os.getenv("ENABLE_MONGO") == "true",
+    enable_s3=os.getenv("ENABLE_S3") == "true"
 )
