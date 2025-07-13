@@ -8,3 +8,4 @@ mysql-connector-python
 pymongo
 boto3
 pandas
+python-dotenv
