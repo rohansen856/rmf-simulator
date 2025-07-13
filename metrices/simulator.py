@@ -106,7 +106,7 @@ class MainframeSimulator:
             # Check if we need to flush the batch
             current_time = datetime.now()
             if (len(self.s3_batch_buffer) >= self.s3_batch_size or 
-                current_time - self.last_s3_flush > self.s3_flush_interval):
+                (current_time - self.last_s3_flush).total_seconds() > self.s3_flush_interval):
                 self._flush_s3_batch()
     
     def _flush_s3_batch(self):
