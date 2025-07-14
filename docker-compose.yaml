@@ -9,7 +9,7 @@ services:
       - ".env"
     volumes:
       - prometheus_data:/tmp/prometheus_multiproc_dir
-    restart: no
+    restart: "no"
     depends_on:
       mysql:
         condition: service_healthy
@@ -48,7 +48,7 @@ services:
       --slow-query-log-file=/var/lib/mysql/slow.log
       --long-query-time=2
       --sql-mode=ONLY_FULL_GROUP_BY,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
-    restart: no
+    restart: "no"
     networks:
       - monitoring
     healthcheck:
@@ -60,7 +60,7 @@ services:
 
   mongodb:
     image: mongo:8.0
-    restart: no
+    restart: "no"
     ports:
       - "27017:27017"
     environment:
@@ -100,7 +100,7 @@ services:
       interval: 30s
       timeout: 20s
       retries: 3
-    restart: no
+    restart: "no"
     networks:
       - monitoring
 
@@ -139,7 +139,7 @@ services:
       - ./minio-policies/nginx-minio.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       - minio
-    restart: no
+    restart: "no"
     networks:
       - monitoring
 
@@ -160,7 +160,7 @@ services:
       - '--web.enable-lifecycle'
     depends_on:
       - rmf-simulator
-    restart: no
+    restart: "no"
     networks:
       - monitoring
 
@@ -177,7 +177,7 @@ services:
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
       - prometheus
-    restart: no
+    restart: "no"
     networks:
       - monitoring
 
@@ -191,7 +191,7 @@ services:
     command:
       - '--config.file=/etc/alertmanager/alertmanager.yml'
       - '--storage.path=/alertmanager'
-    restart: no
+    restart: "no"
     networks:
       - monitoring
 
