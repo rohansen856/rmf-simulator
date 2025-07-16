@@ -1,6 +1,9 @@
 global:
-  smtp_smarthost: 'smtp.company.com:587'
-  smtp_from: 'alerts@company.com'
+  smtp_smarthost: 'smtp.gmail.com:587'
+  smtp_from: 'rohansen856@gmail.com'
+  smtp_auth_username: 'rohansen856@gmail.com'
+  smtp_auth_password: 'bnoc ooxb tvpl ufzh'
+  smtp_auth_password: '{{ getenv "SMTP_PASSWORD" }}'
 
 route:
   group_by: ['sysplex', 'severity']
@@ -16,23 +19,8 @@ route:
 receivers:
   - name: 'mainframe-ops'
     email_configs:
-      - to: 'mainframe-ops@company.com'
-        subject: 'Mainframe Alert: {{.GroupLabels.sysplex}}'
-        body: |
-          {{range .Alerts}}
-          Alert: {{.Annotations.summary}}
-          System: {{.Labels.sysplex}}
-          LPAR: {{.Labels.lpar}}
-          {{end}}
+      - to: 'rohansen856@gmail.com'
 
   - name: 'mainframe-critical'
     email_configs:
-      - to: 'mainframe-critical@company.com'
-        subject: 'CRITICAL: Mainframe Alert: {{.GroupLabels.sysplex}}'
-        body: |
-          {{range .Alerts}}
-          CRITICAL ALERT: {{.Annotations.summary}}
-          System: {{.Labels.sysplex}}
-          LPAR: {{.Labels.lpar}}
-          Description: {{.Annotations.description}}
-          {{end}}
+      - to: 'rohansen856@gmail.com'
