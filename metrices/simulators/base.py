@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 import random
 
 from models.lpar import LPARConfig
@@ -63,8 +63,8 @@ class BaseMetricSimulator(ABC):
         return peak_factor * weekday_factor * month_end_factor * noise_factor
     
     @abstractmethod
-    def simulate(self, lpar_config: LPARConfig) -> Dict[str, Any]:
-        """Generate metrics for the given LPAR configuration"""
+    def simulate(self, lpar_config: LPARConfig) -> List[Dict[str, Any]]:
+        """Generate a list of metrics for the given LPAR configuration"""
         pass
     
     @abstractmethod
