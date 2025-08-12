@@ -1,4 +1,3 @@
-# storage/storage_manager.py
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 import threading
@@ -25,6 +24,14 @@ class StorageManager:
         self._buffer_lock = threading.Lock()
         
         self._initialize_services(enable_mysql, enable_mongodb, enable_s3)
+    
+    def has_storage(self) -> bool:
+        """Check if any storage backend is available"""
+        return any([
+            self.db_service is not None,
+            self.mongo_service is not None,
+            self.s3_service is not None
+        ])
     
     def _initialize_services(self, enable_mysql: bool, enable_mongodb: bool, enable_s3: bool):
         """Initialize storage services based on configuration"""

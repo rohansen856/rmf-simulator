@@ -1,20 +1,60 @@
+import os
 from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
-from storage.mongodb.service import MongoDBService
 from utils.logger import logger
-from storage.mysql.service import DatabaseService
-from storage.S3.s3 import S3StorageService
 
 router = APIRouter()
-db = DatabaseService()
-mongo = MongoDBService()
-s3 = S3StorageService()
+
+# Lazy initialization of storage services based on environment flags
+_db_service = None
+_mongo_service = None
+_s3_service = None
+
+def get_db_service():
+    global _db_service
+    if _db_service is None and os.getenv("ENABLE_MYSQL", "true").lower() == "true":
+        try:
+            from storage.mysql.service import DatabaseService
+            _db_service = DatabaseService()
+        except Exception as e:
+            logger.error(f"Failed to initialize MySQL service: {e}")
+            raise HTTPException(status_code=503, detail="MySQL service unavailable")
+    elif _db_service is None:
+        raise HTTPException(status_code=503, detail="MySQL service disabled")
+    return _db_service
+
+def get_mongo_service():
+    global _mongo_service
+    if _mongo_service is None and os.getenv("ENABLE_MONGO", "true").lower() == "true":
+        try:
+            from storage.mongodb.service import MongoDBService
+            _mongo_service = MongoDBService()
+        except Exception as e:
+            logger.error(f"Failed to initialize MongoDB service: {e}")
+            raise HTTPException(status_code=503, detail="MongoDB service unavailable")
+    elif _mongo_service is None:
+        raise HTTPException(status_code=503, detail="MongoDB service disabled")
+    return _mongo_service
+
+def get_s3_service():
+    global _s3_service
+    if _s3_service is None and os.getenv("ENABLE_S3", "true").lower() == "true":
+        try:
+            from storage.S3.s3 import S3StorageService
+            _s3_service = S3StorageService()
+        except Exception as e:
+            logger.error(f"Failed to initialize S3 service: {e}")
+            raise HTTPException(status_code=503, detail="S3 service unavailable")
+    elif _s3_service is None:
+        raise HTTPException(status_code=503, detail="S3 service disabled")
+    return _s3_service
 
 @router.get("/database-summary")
 async def get_database_summary():
     """Get database metrics summary"""
     try:
+        db = get_db_service()
         summary = db.get_metrics_summary()
         return {
             "database_status": "connected",
@@ -33,6 +73,7 @@ async def get_database_summary():
 async def cleanup_old_data(days_to_keep: int = 90):
     """Clean up old data beyond retention period"""
     try:
+        db = get_db_service()
         db.cleanup_old_data(days_to_keep)
         return {
             "status": "success",
@@ -51,6 +92,7 @@ async def cleanup_old_data(days_to_keep: int = 90):
 async def mongodb_summary():
     """Get MongoDB metrics summary"""
     try:
+        mongo = get_mongo_service()
         summary = mongo.get_metrics_summary()
         return {"summary": summary}
     except Exception as e:
@@ -60,6 +102,7 @@ async def mongodb_summary():
 async def get_latest_mongodb_metrics(sysplex: str, lpar: str = None, limit: int = 100):
     """Get latest metrics from MongoDB"""
     try:
+        mongo = get_mongo_service()
         metrics = mongo.get_latest_metrics(sysplex, lpar, limit)
         return {"metrics": metrics}
     except Exception as e:
@@ -69,6 +112,7 @@ async def get_latest_mongodb_metrics(sysplex: str, lpar: str = None, limit: int 
 async def get_s3_statistics():
     """Get S3 storage statistics"""
     try:
+        s3 = get_s3_service()
         stats = s3.get_storage_statistics()
         return {
             "status": "success",
@@ -91,6 +135,7 @@ async def get_s3_metrics(
 ):
     """Retrieve metrics from S3 storage"""
     try:
+        s3 = get_s3_service()
         metrics = s3.retrieve_metrics(
             metric_type=metric_type,
             sysplex=sysplex,
@@ -123,6 +168,7 @@ async def get_s3_metrics(
 async def create_s3_backup(backup_prefix: Optional[str] = None):
     """Create a backup of all S3 data"""
     try:
+        s3 = get_s3_service()
         backup_key = s3.create_backup(backup_prefix)
         
         if backup_key:

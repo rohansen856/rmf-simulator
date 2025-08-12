@@ -8,7 +8,8 @@ router = APIRouter()
 
 @router.get("/")
 async def root():
-    return {
+    status = simulator.get_simulator_status()
+    response = {
         "name": "RMF Monitor III Data Simulator",
         "version": "1.0.0",
         "sysplex": simulator.sysplex_name,
@@ -16,11 +17,20 @@ async def root():
         "metrics_endpoint": "/metrics",
         "health_endpoint": "/health"
     }
+    
+    # Add mode and storage info if in prometheus-only mode
+    if status.get('mode') == 'prometheus_only':
+        response["mode"] = "prometheus_only"
+        response["storage_backends"] = "disabled"
+    
+    return response
 
 @router.get("/system-info")
 async def get_info():
     current_time = datetime.now()
-    return {
+    status = simulator.get_simulator_status()
+    
+    response = {
         "sysplex": simulator.sysplex_name,
         "timestamp": current_time.isoformat(),
         "uptime_seconds": int((current_time - simulator.start_time).total_seconds()),
@@ -37,3 +47,11 @@ async def get_info():
             for l in LPAR_CONFIGS
         ]
     }
+    
+    # Add mode and storage info from simulator status
+    if status.get('mode'):
+        response["mode"] = status['mode']
+    if 'storage_backends' in status:
+        response["storage_backends"] = status['storage_backends']
+    
+    return response

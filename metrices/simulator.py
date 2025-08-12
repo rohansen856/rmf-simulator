@@ -68,6 +68,30 @@ class MainframeSimulator:
                 self.enabled_simulators.remove(simulator_type)
             logger.info(f"Removed {simulator_type} simulator")
     
+    def get_time_factor(self, lpar_config: LPARConfig) -> float:
+        """Get current time factor for workload simulation (needed for system routes)"""
+        from datetime import datetime
+        current_hour = datetime.now().hour
+        
+        # Base load factor
+        base_factor = 0.3
+        
+        # Peak hour adjustment
+        if current_hour in lpar_config.peak_hours:
+            base_factor = 0.8
+            
+        # Workload type adjustments
+        if lpar_config.workload_type == "batch":
+            # Batch workloads are higher at night
+            if 22 <= current_hour or current_hour <= 6:
+                base_factor *= 1.5
+        elif lpar_config.workload_type == "online":
+            # Online workloads are higher during business hours
+            if 8 <= current_hour <= 18:
+                base_factor *= 1.2
+                
+        return min(base_factor, 1.0)
+    
     def simulate_lpar_metrics(self, lpar_config: LPARConfig):
         """Generate metrics for a single LPAR"""
         all_metrics = []
@@ -80,13 +104,15 @@ class MainframeSimulator:
             except Exception as e:
                 logger.error(f"Error generating {simulator_type} metrics for {lpar_config.name}: {e}")
         
-        # Store all metrics
-        if all_metrics:
+        # Store all metrics only if storage is available
+        if all_metrics and self.storage_manager.has_storage():
             try:
                 self.storage_manager.store_metrics(all_metrics)
                 logger.debug(f"Stored {len(all_metrics)} metrics for {lpar_config.name}")
             except Exception as e:
                 logger.error(f"Error storing metrics for {lpar_config.name}: {e}")
+        elif all_metrics:
+            logger.debug(f"Generated {len(all_metrics)} metrics for {lpar_config.name} (Prometheus only - no storage)")
         
         return all_metrics
     
@@ -102,16 +128,20 @@ class MainframeSimulator:
             except Exception as e:
                 logger.error(f"Error updating metrics for {lpar_config.name}: {e}")
         
-        # Force flush storage after each complete update cycle
-        try:
-            self.storage_manager.force_flush()
-            logger.debug(f"Generated and stored {total_metrics} total metrics")
-        except Exception as e:
-            logger.error(f"Error flushing storage: {e}")
+        # Force flush storage after each complete update cycle (if storage is available)
+        if self.storage_manager.has_storage():
+            try:
+                self.storage_manager.force_flush()
+                logger.debug(f"Generated and stored {total_metrics} total metrics")
+            except Exception as e:
+                logger.error(f"Error flushing storage: {e}")
+        else:
+            logger.debug(f"Generated {total_metrics} total metrics (Prometheus only - no storage)")
     
     def get_simulator_status(self) -> dict:
         """Get status of all simulators"""
-        return {
+        has_storage = self.storage_manager.has_storage()
+        status = {
             'sysplex_name': self.sysplex_name,
             'start_time': self.start_time.isoformat(),
             'enabled_simulators': self.enabled_simulators,
@@ -122,6 +152,12 @@ class MainframeSimulator:
                 's3': self.storage_manager.s3_service is not None
             }
         }
+        
+        # Add mode indicator
+        if not has_storage:
+            status['mode'] = 'prometheus_only'
+            
+        return status
     
     def close(self):
         """Clean up resources"""
@@ -135,10 +171,24 @@ class MainframeSimulator:
 # Factory function for easy initialization
 def create_simulator_from_env() -> MainframeSimulator:
     """Create simulator instance from environment variables"""
+    enable_mysql = os.getenv("ENABLE_MYSQL", "true").lower() == "true"
+    enable_mongodb = os.getenv("ENABLE_MONGO", "true").lower() == "true"
+    enable_s3 = os.getenv("ENABLE_S3", "true").lower() == "true"
+    
+    # If no storage is enabled, create prometheus-only simulator
+    if not (enable_mysql or enable_mongodb or enable_s3):
+        logger.info("No storage services enabled - creating prometheus-only simulator")
+        return MainframeSimulator(
+            enable_mysql=False,
+            enable_mongodb=False, 
+            enable_s3=False,
+            enabled_simulators=os.getenv("ENABLED_SIMULATORS", "cpu,memory,storage,network,clpr,mpb,volumes").split(",")
+        )
+    
     return MainframeSimulator(
-        enable_mysql=os.getenv("ENABLE_MYSQL", "true").lower() == "true",
-        enable_mongodb=os.getenv("ENABLE_MONGO", "true").lower() == "true", 
-        enable_s3=os.getenv("ENABLE_S3", "true").lower() == "true",
+        enable_mysql=enable_mysql,
+        enable_mongodb=enable_mongodb, 
+        enable_s3=enable_s3,
         enabled_simulators=os.getenv("ENABLED_SIMULATORS", "cpu,memory,storage,network,clpr,mpb,volumes").split(",")
     )
 
